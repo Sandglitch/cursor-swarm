@@ -1,45 +1,301 @@
-/* Cursor Swarm — page styling. Dark, modern, no frameworks. */
+/* Cursor Swarm — page styling. Dark, modern, no frameworks.
+ *
+ * The page is a normal scrollable landing page. The swarm canvas (#stage)
+ * is fixed behind everything: dimmed to an ambient glow while you read,
+ * full strength while the playground section is on screen.
+ * src/build.js assembles each section as it scrolls into view; elements
+ * start out .unbuilt and pop in as .built.
+ */
 
 * { box-sizing: border-box; }
 
-html, body {
+html {
+  scroll-behavior: smooth;
+}
+
+body {
   margin: 0;
   padding: 0;
-  height: 100%;
-  overflow: hidden;
   background: #05060f;
   color: #e8eaf6;
   font-family: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+  overflow-x: hidden;
 }
 
+::selection { background: rgba(110, 231, 255, 0.35); }
+
+/* ---------- ambient / playground canvas ---------- */
 #stage {
   position: fixed;
   inset: 0;
   display: block;
-  cursor: crosshair;
-  touch-action: none;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.45;               /* ambient atmosphere while reading */
+  transition: opacity 0.6s ease;
 }
 
-/* ---------- control bar ---------- */
+body.playground-on #stage {
+  opacity: 1;                  /* full strength in the playground */
+}
+
+/* ---------- page layout ---------- */
+#page {
+  position: relative;
+  z-index: 1;
+}
+
+.panel {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 110px 24px 90px;
+}
+
+h1, h2, h3 { line-height: 1.12; }
+
+h2 {
+  font-size: clamp(2rem, 5vw, 3rem);
+  margin: 0 0 14px;
+  letter-spacing: 0.2px;
+  min-height: 1.12em;          /* reserve space while an agent types */
+}
+
+h3 { margin: 0 0 8px; font-size: 1.12rem; }
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  background: rgba(110, 231, 255, 0.10);
+  border: 1px solid rgba(110, 231, 255, 0.16);
+  border-radius: 6px;
+  padding: 0 5px;
+}
+
+a { color: #6ee7ff; }
+
+.section-lede {
+  color: #b8bdd9;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  max-width: 660px;
+  margin: 0 0 10px;
+}
+
+/* ---------- build states (src/build.js) ---------- */
+[data-build], .type-me {
+  transition: opacity 0.38s ease, transform 0.38s cubic-bezier(0.2, 1.35, 0.35, 1);
+}
+
+.unbuilt {
+  opacity: 0;
+  transform: translateY(16px) scale(0.95);
+}
+
+.built {
+  opacity: 1;
+  transform: none;
+}
+
+/* Blinking caret shown on the element an agent is currently typing. */
+.typing::after {
+  content: "▍";
+  margin-left: 1px;
+  color: #6ee7ff;
+  animation: caret-blink 0.75s steps(1) infinite;
+}
+
+@keyframes caret-blink {
+  0%, 55% { opacity: 1; }
+  56%, 100% { opacity: 0; }
+}
+
+/* ---------- hero ---------- */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding-top: 40px;
+}
+
+.hero-badge {
+  font-size: 54px;
+  line-height: 1;
+  filter: drop-shadow(0 0 18px rgba(110, 231, 255, 0.55));
+}
+
+.hero h1 {
+  font-size: clamp(3rem, 10vw, 5.6rem);
+  margin: 18px 0 10px;
+  letter-spacing: 0.5px;
+  min-height: 1.12em;
+  text-shadow: 0 0 34px rgba(110, 231, 255, 0.35);
+}
+
+.hero-sub {
+  font-size: clamp(1.05rem, 2.6vw, 1.4rem);
+  color: #b8bdd9;
+  max-width: 620px;
+  margin: 0;
+  line-height: 1.5;
+  min-height: 3em;             /* room for two typed lines */
+}
+
+.hero-actions {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 34px;
+}
+
+.btn {
+  display: inline-block;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 1rem;
+  padding: 13px 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.btn:hover { transform: translateY(-1px); }
+
+.btn-primary {
+  color: #06121a;
+  background: linear-gradient(120deg, #6ee7ff, #a6ff00);
+  border-color: transparent;
+}
+
+.btn-ghost {
+  color: #e8eaf6;
+  background: rgba(19, 23, 48, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.scroll-hint {
+  margin-top: 46px;
+  color: #8a90b5;
+  font-size: 0.92rem;
+}
+
+/* ---------- cards ---------- */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px;
+  margin-top: 30px;
+}
+
+.card {
+  background: rgba(13, 16, 34, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 20px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.card p {
+  color: #b8bdd9;
+  font-size: 0.94rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.card-emoji {
+  font-size: 26px;
+  margin-bottom: 10px;
+}
+
+.card-author { color: #8a90b5 !important; font-size: 0.85rem !important; }
+
+.chip {
+  display: inline-block;
+  margin-top: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  color: #6ee7ff;
+  background: rgba(110, 231, 255, 0.10);
+  border: 1px solid rgba(110, 231, 255, 0.22);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.swatches {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0 14px;
+}
+
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.card-meta { color: #8a90b5 !important; font-size: 0.82rem !important; }
+
+/* steps */
+.step-num {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #06121a;
+  background: linear-gradient(120deg, #6ee7ff, #a6ff00);
+  margin-bottom: 14px;
+}
+
+/* code block */
+.code-block {
+  margin: 30px 0 18px;
+  background: rgba(8, 10, 24, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 20px 22px;
+  overflow-x: auto;
+  min-height: 196px;
+  text-align: left;
+}
+
+.code-block code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #c9f7ff;
+  white-space: pre;
+}
+
+/* ---------- playground control bar (engine controls) ---------- */
 #bar {
-  position: fixed;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
   justify-content: center;
-  padding: 10px 18px;
-  background: rgba(13, 16, 34, 0.72);
+  padding: 12px 20px;
+  margin: 30px auto 0;
+  width: fit-content;
+  max-width: calc(100vw - 48px);
+  background: rgba(13, 16, 34, 0.78);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
-  z-index: 10;
-  max-width: calc(100vw - 24px);
 }
 
 #bar .brand {
@@ -96,35 +352,160 @@ html, body {
 
 #pauseBtn:hover { background: #2e3470; }
 
+.play-note {
+  text-align: center;
+  color: #8a90b5;
+  margin: 22px 0 0;
+}
+
+/* ---------- contributors wall ---------- */
+.wall-card { text-align: left; }
+
+.wall-face { font-size: 30px; margin-bottom: 10px; }
+
+.wall-cta {
+  text-decoration: none;
+  color: inherit;
+  border-style: dashed;
+  display: block;
+  transition: border-color 0.15s ease;
+}
+
+.wall-cta:hover { border-color: #6ee7ff; }
+
 /* ---------- footer ---------- */
 #foot {
-  position: fixed;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+  text-align: center;
+  padding: 90px 24px 110px;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.foot-line {
+  font-size: clamp(1.1rem, 2.6vw, 1.45rem);
+  color: #e8eaf6;
+  margin: 0 0 16px;
+}
+
+.foot-links {
   display: flex;
   gap: 14px;
   align-items: center;
-  font-size: 12.5px;
+  justify-content: center;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
   color: #8a90b5;
-  background: rgba(13, 16, 34, 0.55);
-  padding: 6px 14px;
-  border-radius: 999px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  z-index: 10;
-  white-space: nowrap;
-  max-width: calc(100vw - 24px);
+  margin: 0;
 }
 
-#foot a {
+.foot-links a {
   color: #6ee7ff;
   text-decoration: none;
 }
 
-#foot a:hover { text-decoration: underline; }
+.foot-links a:hover { text-decoration: underline; }
+
+/* ---------- builder agents ---------- */
+#agents {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0;                  /* revealed by src/build.js once parked */
+  transition: opacity 0.4s ease;
+}
+
+#agents.on { opacity: 1; }
+
+.agent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  will-change: transform;
+  transition: transform 0.55s cubic-bezier(0.3, 0.7, 0.3, 1);
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.55));
+}
+
+.agent-arrow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 17px;
+  height: 21px;
+}
+
+.agent-arrow path {
+  fill: var(--agent, #6ee7ff);
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 1.1;
+}
+
+.agent-tag {
+  position: absolute;
+  left: 15px;
+  top: 15px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: #0b0e1e;
+  background: var(--agent, #6ee7ff);
+  border-radius: 999px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+/* ---------- build-log ticker ---------- */
+#buildlog {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  z-index: 55;
+  pointer-events: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: #9fe8ff;
+}
+
+.log-line {
+  background: rgba(8, 10, 24, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  padding: 5px 11px;
+  margin-top: 6px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: log-in 0.25s ease;
+  white-space: nowrap;
+  max-width: calc(100vw - 28px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.log-line:nth-child(1) { opacity: 0.45; }
+.log-line:nth-child(2) { opacity: 0.7; }
+
+@keyframes log-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- reduced motion ---------- */
+html.reduced-motion .agent,
+html.reduced-motion #buildlog { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 
 @media (max-width: 640px) {
-  #foot span { display: none; }
+  .panel { padding: 80px 18px 70px; }
   #bar { gap: 10px; border-radius: 18px; }
+  .hero-sub { min-height: 4.5em; }
+  #buildlog { font-size: 11px; }
 }

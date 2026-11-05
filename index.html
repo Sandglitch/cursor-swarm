@@ -3,33 +3,144 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cursor Swarm — a tiny swarm that follows your cursor</title>
-<meta name="description" content="A playful interactive web toy: a swarm of glowing dots that flows around your cursor. Pure vanilla JS, no build step. Add your own behavior or skin in one small file!">
+<title>Cursor Swarm — a page that builds itself</title>
+<meta name="description" content="A playful interactive web toy: a swarm of glowing dots that follows your cursor — on a page that builds itself as you scroll, placed live by tiny AI cursors. Pure vanilla JS, no build step. Add your own behavior or skin in one small file!">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <canvas id="stage"></canvas>
 
-<header id="bar">
-  <div class="brand">🌀 Cursor&nbsp;Swarm</div>
-  <label>Behavior
-    <select id="behaviorSelect"></select>
-  </label>
-  <label>Skin
-    <select id="skinSelect"></select>
-  </label>
-  <label>Dots <span id="countValue">220</span>
-    <input id="countRange" type="range" min="30" max="600" step="10" value="220">
-  </label>
-  <button id="pauseBtn" type="button">⏸ Pause</button>
-</header>
+<!-- Builder agents: decorative cursors that assemble the page (src/build.js). -->
+<div id="agents" aria-hidden="true">
+  <div class="agent" id="agent-mip" style="--agent:#6ee7ff">
+    <svg class="agent-arrow" viewBox="0 0 16 20"><path d="M1.5 1.5 L1.5 15 L5.8 11.6 L8.2 17.2 L10.6 16.1 L8.2 10.6 L13.5 10.6 Z"/></svg>
+    <span class="agent-tag">Míp</span>
+  </div>
+  <div class="agent" id="agent-nova" style="--agent:#ff2fd6">
+    <svg class="agent-arrow" viewBox="0 0 16 20"><path d="M1.5 1.5 L1.5 15 L5.8 11.6 L8.2 17.2 L10.6 16.1 L8.2 10.6 L13.5 10.6 Z"/></svg>
+    <span class="agent-tag">Nova</span>
+  </div>
+  <div class="agent" id="agent-pixel" style="--agent:#a6ff00">
+    <svg class="agent-arrow" viewBox="0 0 16 20"><path d="M1.5 1.5 L1.5 15 L5.8 11.6 L8.2 17.2 L10.6 16.1 L8.2 10.6 L13.5 10.6 Z"/></svg>
+    <span class="agent-tag">Pixel</span>
+  </div>
+</div>
 
-<footer id="foot">
-  <span>Made with vanilla JS — no build step, no dependencies.</span>
-  <a href="https://github.com/anhnt256/cursor-swarm" target="_blank" rel="noopener">GitHub</a>
-  <a href="https://github.com/anhnt256/cursor-swarm/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">✨ Add your own behavior</a>
-</footer>
+<!-- Build-log ticker (decorative). -->
+<div id="buildlog" aria-hidden="true"></div>
+
+<main id="page">
+
+  <!-- ================= HERO ================= -->
+  <section id="hero" class="panel hero" data-build-section>
+    <div class="hero-badge unbuilt" data-build>🌀</div>
+    <h1 id="heroTitle" class="type-me">Cursor Swarm</h1>
+    <p id="heroSub" class="hero-sub type-me">A swarm of glowing dots that follows your cursor — on a page that builds itself as you watch.</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary unbuilt" data-build href="#playground">▶ Live playground</a>
+      <a class="btn btn-ghost unbuilt" data-build href="https://github.com/anhnt256/cursor-swarm" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <p class="scroll-hint unbuilt" data-build>scroll — the swarm is still following you ↓</p>
+  </section>
+
+  <!-- ================= BEHAVIORS ================= -->
+  <section id="behaviors" class="panel" data-build-section>
+    <h2 class="type-me">Behaviors</h2>
+    <p class="section-lede unbuilt" data-build>Every behavior is one small file in <code>behaviors/</code> that tells the swarm how to move. These cards are generated live from the registry — every card below is a file a contributor shipped. Try them all in the playground.</p>
+    <div class="card-grid" id="behaviorCards"></div>
+  </section>
+
+  <!-- ================= SKINS ================= -->
+  <section id="skins" class="panel" data-build-section>
+    <h2 class="type-me">Skins</h2>
+    <p class="section-lede unbuilt" data-build>A skin is one small file in <code>skins/</code>: a color palette, a dot size, a mood. Same swarm, different paint.</p>
+    <div class="card-grid" id="skinCards"></div>
+  </section>
+
+  <!-- ================= CONTRIBUTE ================= -->
+  <section id="contribute" class="panel" data-build-section>
+    <h2 class="type-me">How to contribute</h2>
+    <p class="section-lede unbuilt" data-build>Never opened a pull request before? Perfect — this repo is designed to be your first one. Fifteen minutes, one tiny file.</p>
+    <div class="card-grid steps">
+      <article class="card step-card unbuilt" data-build>
+        <div class="step-num">1</div>
+        <h3>Fork &amp; add one file</h3>
+        <p>Fork this repo, then add <strong>one</strong> new file: a behavior in <code>behaviors/</code> or a skin in <code>skins/</code>. Copy-paste templates are in the guide.</p>
+      </article>
+      <article class="card step-card unbuilt" data-build>
+        <div class="step-num">2</div>
+        <h3>Register it</h3>
+        <p>Add <strong>one line</strong> to <code>contributions.json</code> so the engine loads your file. That is the whole integration — no build, no wiring.</p>
+      </article>
+      <article class="card step-card unbuilt" data-build>
+        <div class="step-num">3</div>
+        <h3>Open a pull request</h3>
+        <p>Push, open the PR, and watch the swarm learn your trick — it shows up in the playground and on this page automatically.</p>
+      </article>
+    </div>
+    <pre class="code-block unbuilt" data-build><code id="snippetCode">// behaviors/fireworks.js — a behavior in one small file
+window.SwarmRegistry.registerBehavior({
+  id: 'fireworks',
+  name: 'Fireworks',
+  author: 'your-github-name',
+  update: function (b, ctx) {
+    // nudge b.vx / b.vy — that's all!
+  }
+});</code></pre>
+    <p class="section-lede unbuilt" data-build>Full step-by-step guide: <a href="https://github.com/anhnt256/cursor-swarm/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">CONTRIBUTING.md</a> — or grab a <a href="https://github.com/anhnt256/cursor-swarm/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22" target="_blank" rel="noopener">good first issue</a>.</p>
+  </section>
+
+  <!-- ================= PLAYGROUND ================= -->
+  <section id="playground" class="panel" data-build-section>
+    <h2 class="type-me">Playground</h2>
+    <p class="section-lede unbuilt" data-build>This is the live swarm — the same engine, the same contributed files. Everything a contributor adds ships right here.</p>
+    <header id="bar" class="unbuilt" data-build>
+      <div class="brand">🌀 Cursor&nbsp;Swarm</div>
+      <label>Behavior
+        <select id="behaviorSelect"></select>
+      </label>
+      <label>Skin
+        <select id="skinSelect"></select>
+      </label>
+      <label>Dots <span id="countValue">130</span>
+        <input id="countRange" type="range" min="30" max="600" step="10" value="130">
+      </label>
+      <button id="pauseBtn" type="button">⏸ Pause</button>
+    </header>
+    <p class="play-note unbuilt" data-build>Move your mouse — the swarm follows. Press and hold to stir it up. 🌀</p>
+  </section>
+
+  <!-- ================= CONTRIBUTORS ================= -->
+  <section id="contributors" class="panel" data-build-section>
+    <h2 class="type-me">Contributors</h2>
+    <p class="section-lede unbuilt" data-build>Every name on this wall taught the swarm something.</p>
+    <div class="card-grid wall">
+      <article class="card wall-card unbuilt" data-build>
+        <div class="wall-face">🌀</div>
+        <h3>@anhnt256</h3>
+        <p>Engine + Orbit, Vortex, Chase, Wave, Heart behaviors + Neon, Sunset, Candy, Mono skins</p>
+      </article>
+      <a class="card wall-card wall-cta unbuilt" data-build href="https://github.com/anhnt256/cursor-swarm/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">
+        <div class="wall-face">✨</div>
+        <h3>Your face here</h3>
+        <p>Be the first contributor — add a behavior or a skin and take this spot.</p>
+      </a>
+    </div>
+  </section>
+
+  <!-- ================= FOOTER ================= -->
+  <footer id="foot" data-build-section>
+    <p class="foot-line unbuilt" data-build>Every section on this page was placed by a cursor, working alongside the others.</p>
+    <p class="foot-links unbuilt" data-build>
+      <span>Made with vanilla JS — no build step, no dependencies.</span>
+      <a href="https://github.com/anhnt256/cursor-swarm" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/anhnt256/cursor-swarm/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">✨ Add your own behavior</a>
+    </p>
+  </footer>
+
+</main>
 
 <script src="src/engine.js"></script>
+<script src="src/build.js"></script>
 </body>
 </html>

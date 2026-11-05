@@ -1,6 +1,6 @@
 # 🌀 Cursor Swarm
 
-**A tiny swarm of glowing dots that follows your cursor around the screen — and you can teach it a new trick in 15 minutes.**
+**A tiny swarm of glowing dots that follows your cursor around the screen — on a demo page that builds itself as you scroll — and you can teach it a new trick in 15 minutes.**
 
 ▶️ **Live demo: https://anhnt256.github.io/cursor-swarm/**
 
@@ -10,9 +10,18 @@
 
 Cursor Swarm is a playful interactive web toy: hundreds of glowing dots
 (a boid swarm) flow, orbit, spiral and even form a heart around your mouse
-pointer on a full-screen canvas. Switch behaviors and color skins from the
-little control bar at the top, drag the slider to add more dots, and just
-play.
+pointer. The swarm hovers behind the page as a soft ambient glow while you
+read, and comes to full strength in the playground section, where you can
+switch behaviors and color skins, drag the slider to add more dots, and
+just play.
+
+And the demo page itself is part of the toy: **it builds itself as you
+scroll.** Three tiny AI cursors — Míp, Nova and Pixel — fly around each
+section as it comes into view: one types the headings character by
+character while the others drop the cards, buttons and code blocks into
+place, narrating their work in a little build log at the bottom of the
+screen. Every section on the page was placed by a cursor, working
+alongside the others.
 
 It is also an experiment in friendly open source: **almost everything fun
 about this project is meant to be added by contributors**, one tiny file
@@ -25,6 +34,11 @@ designed to be your first one. 💛
   `index.html` in a browser and it runs. It also works as-is on GitHub Pages.
 - `src/engine.js` runs the canvas, the dot physics (velocity, speed cap,
   pointer tracking) and the control bar.
+- `src/build.js` runs the three builder cursors that assemble the demo
+  page section by section as you scroll (and quietly shows everything at
+  once if you prefer reduced motion). The Behaviors and Skins sections of
+  the page are generated live from the registry — add a file, and your
+  card appears on the page automatically.
 - A **behavior** is one small file in `behaviors/` that tells the swarm
   how to move. A **skin** is one small file in `skins/` with a color
   palette and dot style.
@@ -48,9 +62,10 @@ Looking for an idea? Check the
 ## Project layout
 
 ```
-index.html          the demo page
+index.html          the demo page (builds itself as you scroll)
 style.css           page styling
 src/engine.js       canvas engine + registry + loader
+src/build.js        the builder cursors that assemble the page
 behaviors/          one file per swarm behavior   ← your PR goes here
 skins/              one file per color skin        ← …or here
 contributions.json  manifest of behaviors & skins (add 1 line)
