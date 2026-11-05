@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cursor Swarm — a tiny swarm that follows your cursor</title>
+<meta name="description" content="A playful interactive web toy: a swarm of glowing dots that flows around your cursor. Pure vanilla JS, no build step. Add your own behavior or skin in one small file!">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="stage"></canvas>
+
+<header id="bar">
+  <div class="brand">🌀 Cursor&nbsp;Swarm</div>
+  <label>Behavior
+    <select id="behaviorSelect"></select>
+  </label>
+  <label>Skin
+    <select id="skinSelect"></select>
+  </label>
+  <label>Dots <span id="countValue">220</span>
+    <input id="countRange" type="range" min="30" max="600" step="10" value="220">
+  </label>
+  <button id="pauseBtn" type="button">⏸ Pause</button>
+</header>
+
+<footer id="foot">
+  <span>Made with vanilla JS — no build step, no dependencies.</span>
+  <a href="https://github.com/anhnt256/cursor-swarm" target="_blank" rel="noopener">GitHub</a>
+  <a href="https://github.com/anhnt256/cursor-swarm/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">✨ Add your own behavior</a>
+</footer>
+
+<script src="src/engine.js"></script>
+</body>
+</html>
