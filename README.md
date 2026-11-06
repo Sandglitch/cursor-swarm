@@ -79,7 +79,8 @@ Thank you to everyone who teaches the swarm a new trick! 🙌
 | Contributor | Contribution |
 |---|---|
 | [@anhnt256](https://github.com/anhnt256) | Engine + Orbit, Vortex, Chase, Wave, Heart behaviors + Neon, Sunset, Candy, Mono skins |
-| *Be the first!* | *Your behavior or skin here — see [CONTRIBUTING.md](CONTRIBUTING.md)* |
+| [@faithfull-3](https://github.com/faithfull-3) | Matrix skin — the first community contribution 🎉 |
+| *You could be next!* | *Your behavior or skin here — see [CONTRIBUTING.md](CONTRIBUTING.md)* |
 
 ## License
 
