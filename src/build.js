@@ -3,8 +3,8 @@
  *
  * "A website that builds itself as you scroll."
  *
- * Three tiny AI cursors (Míp, Nova, Pixel) assemble every section of this
- * page the first time it scrolls into view: they fly to each element,
+ * Five tiny AI cursors (Míp, Nova, Pixel, Comet, Pip) assemble every
+ * section of this page the first time it scrolls into view: they fly to each element,
  * type the headings character by character, and drop cards, buttons and
  * blocks into place one by one, narrating their work in the build-log
  * ticker at the bottom-left.
@@ -67,11 +67,17 @@
     }),
     pixel: makeAgent('agent-pixel', 'Pixel', function () {
       return { x: 30, y: 92 };
+    }),
+    comet: makeAgent('agent-comet', 'Comet', function () {
+      return { x: 30, y: window.innerHeight - 130 };
+    }),
+    pip: makeAgent('agent-pip', 'Pip', function () {
+      return { x: Math.round(window.innerWidth / 2) - 40, y: window.innerHeight - 130 };
     })
   };
 
   /* Serialize work per agent: an agent never does two things at once,
-   * but the three agents work in parallel. */
+   * but the five agents work in parallel. */
   function agentDo(agent, task) {
     var run = agent.queue.then(task, task);
     agent.queue = run.then(noop, noop);
@@ -132,6 +138,52 @@
       el.classList.remove('unbuilt');
       if (msg) log(msg);
       await sleep(80);
+    });
+  }
+
+  /* Drag an element into place: the agent flies to a point off to one
+   * side (fromDir -1 = from the left, +1 = from the right), grabs the
+   * element there, and hauls it along a shallow arc into its slot,
+   * where the .built transition's overshoot gives it a soft settle.
+   * Used for cards and chips, where a plain pop feels too static. */
+  function dragIn(agent, el, msg, fromDir) {
+    if (!el) return Promise.resolve();
+    if (INSTANT || REDUCED) {
+      el.classList.add('built');
+      el.classList.remove('unbuilt');
+      if (msg) log(msg);
+      return Promise.resolve();
+    }
+    return agentDo(agent, async function () {
+      var r = el.getBoundingClientRect();
+      var dir = (fromDir || 1);
+      var offX = dir * -150;                 /* start off to one side… */
+      var offY = 56;                         /* …and a little low */
+      var startX = r.left + offX, startY = r.top + offY;
+      await flyAgentTo(agent, startX, startY);
+
+      /* Show the element at the grabbed offset, with no transition. */
+      el.style.transition = 'none';
+      el.classList.add('built');
+      el.classList.remove('unbuilt');
+      el.style.transform =
+        'translate(' + offX + 'px, ' + offY + 'px) scale(0.92)';
+      void el.offsetWidth;                   /* commit the start pose */
+      el.style.transition = '';
+
+      /* Arc midpoint: most of the way home, lifted a touch. */
+      var midX = offX * 0.32, midY = offY * 0.32 - 26;
+      el.style.transform =
+        'translate(' + midX + 'px, ' + midY + 'px) scale(0.97)';
+      flyAgentTo(agent, r.left + midX, r.top + midY);
+      await sleep(190);
+
+      /* Final leg: release — the element settles into its slot while
+       * the agent steps back to the element's corner. */
+      el.style.transform = '';
+      await flyAgentTo(agent, r.left - 8, r.top - 8);
+      if (msg) log(msg);
+      await sleep(60);
     });
   }
 
@@ -279,6 +331,100 @@
     }
   }
 
+  /* ---------------- hall of fame ---------------- */
+
+  /* One entry per unique author across behaviors + skins, with counts.
+   * Sorted: anhnt256 (the maintainer) first, then by total count
+   * descending, then by name. Pure function of the registry — exposed
+   * below as window.SwarmHallOfFame so it can be tested headlessly. */
+  function aggregateAuthors(r) {
+    var map = {};
+    var list = [];
+    function add(def, kind) {
+      var author = (def && def.author) || 'unknown';
+      if (!map[author]) {
+        map[author] = { author: author, behaviors: 0, skins: 0, total: 0 };
+        list.push(map[author]);
+      }
+      map[author][kind]++;
+      map[author].total++;
+    }
+    ((r && r.behaviors) || []).forEach(function (d) { add(d, 'behaviors'); });
+    ((r && r.skins) || []).forEach(function (d) { add(d, 'skins'); });
+    list.sort(function (a, b) {
+      if (a.author === 'anhnt256') return -1;
+      if (b.author === 'anhnt256') return 1;
+      if (b.total !== a.total) return b.total - a.total;
+      return a.author < b.author ? -1 : 1;
+    });
+    return list;
+  }
+
+  /* Presentation facts for one author's chip: initial letter, a stable
+   * color hashed from the name, and the "N behaviors · M skins" line. */
+  function hofDescribe(entry) {
+    var hash = 0;
+    for (var i = 0; i < entry.author.length; i++) {
+      hash = (hash * 31 + entry.author.charCodeAt(i)) % 360;
+    }
+    var parts = [];
+    if (entry.behaviors) {
+      parts.push(entry.behaviors + (entry.behaviors === 1 ? ' behavior' : ' behaviors'));
+    }
+    if (entry.skins) {
+      parts.push(entry.skins + (entry.skins === 1 ? ' skin' : ' skins'));
+    }
+    return {
+      initial: entry.author.charAt(0).toUpperCase(),
+      color: 'hsl(' + hash + ', 72%, 58%)',
+      countText: parts.join(' · ')
+    };
+  }
+
+  function renderHallOfFame(instant) {
+    var section = document.getElementById('halloffame');
+    var wrap = document.getElementById('hofChips');
+    if (!section || !wrap || wrap.children.length) return;
+    var authors = aggregateAuthors(window.SwarmRegistry || { behaviors: [], skins: [] });
+    if (!authors.length) {
+      /* Nothing to celebrate yet: hide the section and stop the build
+       * observer from ever trying to assemble it. */
+      section.style.display = 'none';
+      section.removeAttribute('data-build-section');
+      return;
+    }
+    authors.forEach(function (entry) {
+      var d = hofDescribe(entry);
+      var chip = document.createElement('div');
+      chip.className = 'hof-chip' + (instant ? ' built' : ' unbuilt');
+      chip.setAttribute('data-build', '');
+      var face = document.createElement('span');
+      face.className = 'hof-initial';
+      face.style.backgroundColor = d.color;
+      face.textContent = d.initial;
+      chip.appendChild(face);
+      var text = document.createElement('span');
+      text.className = 'hof-text';
+      var name = document.createElement('span');
+      name.className = 'hof-name';
+      name.textContent = entry.author;
+      var count = document.createElement('span');
+      count.className = 'hof-count';
+      count.textContent = d.countText;
+      text.appendChild(name);
+      text.appendChild(count);
+      chip.appendChild(text);
+      wrap.appendChild(chip);
+    });
+  }
+
+  /* Test hook: lets a headless harness run the real aggregation +
+   * chip-description logic against the real registry. */
+  window.SwarmHallOfFame = {
+    aggregateAuthors: aggregateAuthors,
+    describe: hofDescribe
+  };
+
   /* ---------------- section build sequences ---------------- */
 
   async function buildHero(section) {
@@ -292,10 +438,11 @@
     log('Nova typed the subtitle');
     await Promise.all([
       place(agents.pixel, btns[0], 'Pixel placed the playground button'),
-      place(agents.nova, btns[1], 'Nova placed the GitHub button')
+      place(agents.comet, btns[1], 'Comet placed the GitHub button')
     ]);
-    await place(agents.mip, hint);
+    await place(agents.pip, hint, 'Pip placed the scroll hint');
     park(agents.mip); park(agents.nova); park(agents.pixel);
+    park(agents.comet); park(agents.pip);
   }
 
   async function buildCardSection(section, kind, headingAgent) {
@@ -304,17 +451,28 @@
     var cards = section.querySelectorAll('.card');
     await typeText(headingAgent, h2, 42);
     log(headingAgent.name + ' typed the "' + (h2.dataset.fullText || '') + '" heading');
-    await place(agents.pixel, lede);
-    var crew = [agents.nova, agents.pixel, agents.mip];
+    await place(agents.comet, lede);
+    /* Two crews drag cards in from opposite ends at the same time:
+     * Nova + Comet work from the first card forward, Pip + Pixel from
+     * the last card backward, and they meet in the middle. */
     var total = cards.length;
+    var half = Math.ceil(total / 2);
+    var frontCrew = [agents.nova, agents.comet];
+    var backCrew = [agents.pip, agents.pixel];
     await Promise.all(Array.prototype.map.call(cards, function (card, i) {
-      var agent = crew[i % crew.length];
-      return sleep(INSTANT ? 0 : i * 170).then(function () {
-        return place(agent, card,
-          agent.name + ' placed card ' + (i + 1) + '/' + total + ' — ' + kind);
+      var fromFront = i < half;
+      var slot = fromFront ? i : (total - 1 - i);
+      var agent = fromFront
+        ? frontCrew[slot % frontCrew.length]
+        : backCrew[slot % backCrew.length];
+      return sleep(INSTANT ? 0 : slot * 160).then(function () {
+        return dragIn(agent, card,
+          agent.name + ' placed card ' + (i + 1) + '/' + total + ' — ' + kind,
+          fromFront ? -1 : 1);
       });
     }));
     park(agents.nova); park(agents.pixel);
+    park(agents.comet); park(agents.pip);
   }
 
   async function buildContribute(section) {
@@ -326,27 +484,35 @@
     await typeText(agents.mip, h2, 40);
     log('Míp typed the "How to contribute" heading');
     await place(agents.nova, ledes[0]);
-    await place(agents.nova, steps[0], 'Nova placed step 1/3 — contribute');
-    await place(agents.pixel, steps[1], 'Pixel placed step 2/3 — contribute');
-    await place(agents.mip, steps[2], 'Míp placed step 3/3 — contribute');
-    await place(agents.nova, pre, 'Nova placed the code block');
+    await Promise.all([
+      place(agents.nova, steps[0], 'Nova placed step 1/3 — contribute'),
+      place(agents.pixel, steps[1], 'Pixel placed step 2/3 — contribute'),
+      place(agents.comet, steps[2], 'Comet placed step 3/3 — contribute')
+    ]);
+    await place(agents.pip, pre, 'Pip placed the code block');
     await typeCode(agents.nova, code);
     log('Nova typed the registerBehavior snippet');
-    await place(agents.pixel, ledes[1]);
+    await place(agents.comet, ledes[1]);
     park(agents.mip); park(agents.nova); park(agents.pixel);
+    park(agents.comet); park(agents.pip);
   }
 
   async function buildPlayground(section) {
     var h2 = section.querySelector('h2');
     var lede = section.querySelector('.section-lede');
     var note = section.querySelector('.play-note');
+    var tip = section.querySelector('.play-tip');
     await typeText(agents.pixel, h2, 42);
     log('Pixel typed the "Playground" heading');
     await place(agents.nova, lede);
     await place(agents.mip, document.getElementById('bar'),
       'Míp placed the playground controls');
-    await place(agents.nova, note);
+    await Promise.all([
+      place(agents.comet, note),
+      place(agents.pip, tip, 'Pip placed the burst tip')
+    ]);
     park(agents.mip); park(agents.nova); park(agents.pixel);
+    park(agents.comet); park(agents.pip);
   }
 
   async function buildContributors(section) {
@@ -358,16 +524,47 @@
     await place(agents.pixel, lede);
     await Promise.all([
       place(agents.pixel, cards[0], 'Pixel placed the contributor wall'),
-      place(agents.mip, cards[1], 'Míp saved a spot for you')
+      place(agents.comet, cards[1], 'Comet saved a spot for you')
     ]);
-    park(agents.pixel); park(agents.mip);
+    park(agents.pixel); park(agents.comet);
+  }
+
+  async function buildHallOfFame(section) {
+    var h2 = section.querySelector('h2');
+    var lede = section.querySelector('.section-lede');
+    var chips = section.querySelectorAll('.hof-chip');
+    await typeText(agents.comet, h2, 42);
+    log('Comet typed the "Hall of Fame" heading');
+    await place(agents.pip, lede);
+    /* Same two-crew trick as the card grids: chips are dragged in from
+     * both ends at once. */
+    var total = chips.length;
+    var half = Math.ceil(total / 2);
+    var frontCrew = [agents.nova, agents.pip];
+    var backCrew = [agents.comet, agents.mip];
+    await Promise.all(Array.prototype.map.call(chips, function (chip, i) {
+      var fromFront = i < half;
+      var slot = fromFront ? i : (total - 1 - i);
+      var agent = fromFront
+        ? frontCrew[slot % frontCrew.length]
+        : backCrew[slot % backCrew.length];
+      return sleep(INSTANT ? 0 : slot * 150).then(function () {
+        return dragIn(agent, chip,
+          agent.name + ' placed a Hall of Fame chip — ' +
+            (chip.querySelector('.hof-name') || {}).textContent,
+          fromFront ? -1 : 1);
+      });
+    }));
+    park(agents.nova); park(agents.pip);
+    park(agents.comet); park(agents.mip);
   }
 
   async function buildFooter(footer) {
     await place(agents.mip, footer.querySelector('.foot-line'),
       'Míp placed the closing line');
-    await place(agents.pixel, footer.querySelector('.foot-links'));
-    park(agents.mip); park(agents.pixel);
+    await place(agents.pip, footer.querySelector('.foot-links'),
+      'Pip placed the footer links');
+    park(agents.mip); park(agents.pip);
   }
 
   async function buildGeneric(section) {
@@ -377,9 +574,10 @@
     for (i = 0; i < headings.length; i++) {
       await typeText(agents.pixel, headings[i], 30);
     }
+    var crew = [agents.nova, agents.pip, agents.comet];
     await Promise.all(Array.prototype.map.call(items, function (el, j) {
       return sleep(INSTANT ? 0 : j * 150).then(function () {
-        return place(agents.nova, el);
+        return place(crew[j % crew.length], el);
       });
     }));
   }
@@ -390,6 +588,7 @@
     skins: function (s) { return buildCardSection(s, 'skins', agents.mip); },
     contribute: buildContribute,
     playground: buildPlayground,
+    halloffame: buildHallOfFame,
     contributors: buildContributors,
     foot: buildFooter
   };
@@ -415,7 +614,14 @@
     var builder = builders[section.id] || buildGeneric;
     Promise.resolve()
       .then(function () { return builder(section); })
-      .catch(function () { forceBuilt(section); });
+      .then(function () {
+        /* Triggers the title underline draw in style.css. */
+        section.classList.add('build-done');
+      })
+      .catch(function () {
+        forceBuilt(section);
+        section.classList.add('build-done');
+      });
   }
 
   function setupObservers() {
@@ -479,7 +685,11 @@
       document.documentElement.classList.add('reduced-motion');
       registryReady().then(function () {
         renderCards(true);
+        renderHallOfFame(true);
         forceBuilt(document);
+        $all('[data-build-section]').forEach(function (s) {
+          s.classList.add('build-done');
+        });
       });
       return;
     }
@@ -487,6 +697,7 @@
     initAgents();
     registryReady().then(function () {
       renderCards(false);
+      renderHallOfFame(false);
       setupObservers();
       setTimeout(watchdog, 6500);
     });

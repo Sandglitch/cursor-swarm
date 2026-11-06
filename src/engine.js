@@ -71,7 +71,8 @@
       'skins/neon.js',
       'skins/sunset.js',
       'skins/candy.js',
-      'skins/mono.js'
+      'skins/mono.js',
+      'skins/matrix.js'
     ]
   };
 
@@ -83,15 +84,49 @@
   var W = 0, H = 0, DPR = 1;
 
   var pointer = { x: 0, y: 0, active: false, down: false };
+
+  /* Behaviors steer toward this eased copy of the pointer, not the raw
+   * one: it glides a little behind the real cursor, which makes the
+   * whole swarm feel fluid instead of jittery. `down` / `active` are
+   * mirrored from the raw pointer every frame, so behavior semantics
+   * (ctx.pointer.x / .y / .down) are unchanged. */
+  var smoothPointer = { x: 0, y: 0, active: false, down: false };
+  var POINTER_EASE = 0.16;
+
   var boids = [];
   var running = true;
   var startTime = performance.now();
+  var lastFrameTime = 0;
 
   var activeBehavior = null;
   var activeSkin = null;
 
   var MAX_SPEED = 4.2;
   var FRICTION = 0.96;
+
+  var REDUCED_MOTION = !!(window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  /* Click bursts (playground): pending expanding rings. The velocity
+   * impulse itself is applied immediately by applyBurst(). */
+  var bursts = [];
+  var BURST_RADIUS = 260;
+  var BURST_POWER = 10;
+  var BURST_BOOST_MS = 380;
+  var RING_MS = 650;
+
+  /* Adaptive quality: requestedCount is what the slider asks for;
+   * activeCount is how many dots are actually simulated/drawn. If the
+   * frame rate stays low, activeCount steps down (and back up when the
+   * frame rate recovers) — silently, with no UI. */
+  var requestedCount = 0;
+  var activeCount = 0;
+  var QUALITY_STEPS = [1, 0.7, 0.45, 0.25];
+  var qualityLevel = 0;
+  var fpsFrames = 0;
+  var fpsWindowStart = 0;
+  var lowStreak = 0;
+  var highStreak = 0;
 
   function resize() {
     DPR = Math.min(window.devicePixelRatio || 1, 2);
@@ -102,7 +137,10 @@
     canvas.style.width = W + 'px';
     canvas.style.height = H + 'px';
     ctx2d.setTransform(DPR, 0, 0, DPR, 0, 0);
-    if (!pointer.active) { pointer.x = W / 2; pointer.y = H / 2; }
+    if (!pointer.active) {
+      pointer.x = W / 2; pointer.y = H / 2;
+      smoothPointer.x = W / 2; smoothPointer.y = H / 2;
+    }
   }
   window.addEventListener('resize', resize);
 
@@ -123,40 +161,143 @@
   /* Boids                                                               */
   /* ------------------------------------------------------------------ */
   function makeBoids(n) {
+    requestedCount = n;
+    activeCount = n;
+    qualityLevel = 0;
+    lowStreak = 0;
+    highStreak = 0;
     boids = [];
     for (var i = 0; i < n; i++) {
       boids.push({
         x: Math.random() * W,
         y: Math.random() * H,
         vx: (Math.random() - 0.5) * 2,
-        vy: (Math.random() - 0.5) * 2
+        vy: (Math.random() - 0.5) * 2,
+        boostUntil: 0
       });
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Click burst                                                         */
+  /*                                                                     */
+  /* Every dot within BURST_RADIUS of (x, y) gets a radial shove away    */
+  /* from that point; the push fades linearly to zero at the rim, and    */
+  /* friction decays it naturally afterwards. Affected dots may briefly  */
+  /* exceed the normal speed cap (see step()) so the burst reads as a    */
+  /* burst, not just a change of direction. Returns the number of dots   */
+  /* affected. Kept free of DOM/canvas access so it can be unit-tested   */
+  /* outside the browser.                                                */
+  /* ------------------------------------------------------------------ */
+  function applyBurst(list, x, y, power, now, limit) {
+    var n = (typeof limit === 'number')
+      ? Math.min(list.length, limit)
+      : list.length;
+    var hit = 0;
+    for (var i = 0; i < n; i++) {
+      var b = list[i];
+      var dx = b.x - x;
+      var dy = b.y - y;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist >= BURST_RADIUS) continue;
+      var d = dist || 1;
+      var f = power * (1 - dist / BURST_RADIUS);
+      b.vx += (dx / d) * f;
+      b.vy += (dy / d) * f;
+      b.boostUntil = now + BURST_BOOST_MS;
+      hit++;
+    }
+    return hit;
+  }
+
+  function spawnBurst(x, y) {
+    var now = performance.now();
+    bursts.push({ x: x, y: y, t0: now });
+    applyBurst(boids, x, y, BURST_POWER, now, activeCount);
+  }
+
+  /* Clicking/tapping the playground canvas area bursts the swarm. The
+   * canvas itself is pointer-events:none, so clicks land on the window;
+   * only fire while the playground is on screen (body.playground-on is
+   * managed by src/build.js) and never when the click actually hit the
+   * control bar or any interactive element. */
+  window.addEventListener('pointerdown', function (e) {
+    if (REDUCED_MOTION) return;
+    if (!document.body || !document.body.classList.contains('playground-on')) return;
+    var t = e.target;
+    if (t && t.closest && t.closest('#bar, a, button, select, input, textarea, label')) return;
+    spawnBurst(e.clientX, e.clientY);
+  });
+
+  /* Small test hook: lets a headless harness verify the burst math
+   * against the real function instead of a copy. */
+  window.SwarmEngineTest = { applyBurst: applyBurst };
+
+  /* ------------------------------------------------------------------ */
+  /* Adaptive quality                                                    */
+  /*                                                                     */
+  /* Once a second, look at the measured frame rate. Two low readings    */
+  /* in a row (< 45fps) step the active dot count down; three strong     */
+  /* readings (> 57fps) step it back up. Nothing is shown in the UI.     */
+  /* ------------------------------------------------------------------ */
+  function adaptQuality(now) {
+    if (!fpsWindowStart) { fpsWindowStart = now; return; }
+    fpsFrames++;
+    var elapsed = now - fpsWindowStart;
+    if (elapsed < 1000) return;
+    var fps = (fpsFrames * 1000) / elapsed;
+    fpsFrames = 0;
+    fpsWindowStart = now;
+
+    if (now - startTime < 3000) return; /* warm-up: don't judge early frames */
+
+    if (fps < 45) { lowStreak++; highStreak = 0; }
+    else if (fps > 57) { highStreak++; lowStreak = 0; }
+    else { lowStreak = 0; highStreak = 0; }
+
+    if (lowStreak >= 2 && qualityLevel < QUALITY_STEPS.length - 1) {
+      qualityLevel++;
+      lowStreak = 0;
+      activeCount = Math.max(24, Math.round(requestedCount * QUALITY_STEPS[qualityLevel]));
+    } else if (highStreak >= 3 && qualityLevel > 0) {
+      qualityLevel--;
+      highStreak = 0;
+      activeCount = Math.round(requestedCount * QUALITY_STEPS[qualityLevel]);
     }
   }
 
   function step(now) {
     var t = (now - startTime) / 1000;
+
+    /* Ease the pointer the behaviors see toward the real one. */
+    smoothPointer.x += (pointer.x - smoothPointer.x) * POINTER_EASE;
+    smoothPointer.y += (pointer.y - smoothPointer.y) * POINTER_EASE;
+    smoothPointer.active = pointer.active;
+    smoothPointer.down = pointer.down;
+
     var ctxForBehavior = {
-      pointer: pointer,
+      pointer: smoothPointer,
       width: W,
       height: H,
       time: t,
-      count: boids.length,
+      count: activeCount,
       index: 0
     };
 
-    for (var i = 0; i < boids.length; i++) {
+    for (var i = 0; i < activeCount; i++) {
       var b = boids[i];
       ctxForBehavior.index = i;
       if (activeBehavior) activeBehavior.update(b, ctxForBehavior);
 
-      /* Integrate + cap speed. */
+      /* Integrate + cap speed (freshly burst dots get a brief, higher
+       * cap so the shove isn't clipped in the same frame). */
       b.vx *= FRICTION;
       b.vy *= FRICTION;
+      var cap = (b.boostUntil && now < b.boostUntil) ? MAX_SPEED * 2.6 : MAX_SPEED;
       var sp = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-      if (sp > MAX_SPEED) {
-        b.vx = (b.vx / sp) * MAX_SPEED;
-        b.vy = (b.vy / sp) * MAX_SPEED;
+      if (sp > cap) {
+        b.vx = (b.vx / sp) * cap;
+        b.vy = (b.vy / sp) * cap;
       }
       b.x += b.vx;
       b.y += b.vy;
@@ -185,7 +326,7 @@
 
     var r = skin.radius || 3;
     ctx2d.shadowBlur = skin.glow ? 12 : 0;
-    for (var i = 0; i < boids.length; i++) {
+    for (var i = 0; i < activeCount; i++) {
       var b = boids[i];
       var color = skin.colors[i % skin.colors.length];
       ctx2d.fillStyle = color;
@@ -195,9 +336,26 @@
       ctx2d.fill();
     }
     ctx2d.shadowBlur = 0;
+
+    /* Expanding rings where visitors clicked to burst the swarm. */
+    if (bursts.length) {
+      var ringColor = (skin.colors && skin.colors[0]) || '#ffffff';
+      if (ringColor.charAt(0) !== '#') ringColor = '#ffffff';
+      for (var j = bursts.length - 1; j >= 0; j--) {
+        var age = (lastFrameTime - bursts[j].t0) / RING_MS;
+        if (age >= 1) { bursts.splice(j, 1); continue; }
+        ctx2d.beginPath();
+        ctx2d.strokeStyle = hexToRgba(ringColor, (1 - age) * 0.55);
+        ctx2d.lineWidth = 2;
+        ctx2d.arc(bursts[j].x, bursts[j].y, 12 + age * 170, 0, Math.PI * 2);
+        ctx2d.stroke();
+      }
+    }
   }
 
   function frame(now) {
+    lastFrameTime = now;
+    adaptQuality(now);
     if (running) {
       step(now);
       draw();
