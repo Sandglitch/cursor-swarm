@@ -16,7 +16,7 @@ switch behaviors and color skins, drag the slider to add more dots, and
 just play.
 
 And the demo page itself is part of the toy: **it builds itself as you
-scroll.** Three tiny AI cursors — Míp, Nova and Pixel — fly around each
+scroll.** Five tiny AI cursors — Míp, Nova, Pixel, Comet and Pip — fly around each
 section as it comes into view: one types the headings character by
 character while the others drop the cards, buttons and code blocks into
 place, narrating their work in a little build log at the bottom of the
@@ -34,7 +34,7 @@ designed to be your first one. 💛
   `index.html` in a browser and it runs. It also works as-is on GitHub Pages.
 - `src/engine.js` runs the canvas, the dot physics (velocity, speed cap,
   pointer tracking) and the control bar.
-- `src/build.js` runs the three builder cursors that assemble the demo
+- `src/build.js` runs the five builder cursors that assemble the demo
   page section by section as you scroll (and quietly shows everything at
   once if you prefer reduced motion). The Behaviors and Skins sections of
   the page are generated live from the registry — add a file, and your

@@ -24,6 +24,14 @@
     <svg class="agent-arrow" viewBox="0 0 16 20"><path d="M1.5 1.5 L1.5 15 L5.8 11.6 L8.2 17.2 L10.6 16.1 L8.2 10.6 L13.5 10.6 Z"/></svg>
     <span class="agent-tag">Pixel</span>
   </div>
+  <div class="agent" id="agent-comet" style="--agent:#ff9f1c">
+    <svg class="agent-arrow" viewBox="0 0 16 20"><path d="M1.5 1.5 L1.5 15 L5.8 11.6 L8.2 17.2 L10.6 16.1 L8.2 10.6 L13.5 10.6 Z"/></svg>
+    <span class="agent-tag">Comet</span>
+  </div>
+  <div class="agent" id="agent-pip" style="--agent:#9b5de5">
+    <svg class="agent-arrow" viewBox="0 0 16 20"><path d="M1.5 1.5 L1.5 15 L5.8 11.6 L8.2 17.2 L10.6 16.1 L8.2 10.6 L13.5 10.6 Z"/></svg>
+    <span class="agent-tag">Pip</span>
+  </div>
 </div>
 
 <!-- Build-log ticker (decorative). -->
@@ -108,6 +116,14 @@ window.SwarmRegistry.registerBehavior({
       <button id="pauseBtn" type="button">⏸ Pause</button>
     </header>
     <p class="play-note unbuilt" data-build>Move your mouse — the swarm follows. Press and hold to stir it up. 🌀</p>
+    <p class="play-note play-tip unbuilt" data-build>Tip: click the canvas to make the swarm burst.</p>
+  </section>
+
+  <!-- ================= HALL OF FAME ================= -->
+  <section id="halloffame" class="panel" data-build-section>
+    <h2 class="type-me">Hall of Fame</h2>
+    <p class="section-lede unbuilt" data-build>Every author who taught the swarm a trick, counted live from the registry — ship one file and your name lands here automatically.</p>
+    <div class="hof-wrap" id="hofChips"></div>
   </section>
 
   <!-- ================= CONTRIBUTORS ================= -->
