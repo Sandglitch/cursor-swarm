@@ -1,6 +1,6 @@
 /*
- * Behavior: Gravity
- * Author: Jerin Joice
+ * Behavior: Gravity Well
+ * Author: Sandglitch
  * While the mouse is held, a strong gravity well pulls every dot
  * spiraling into the click point; release and they scatter.
  */
