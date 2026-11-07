@@ -1,1 +1,22 @@
-{"behaviors":["behaviors/orbit.js","behaviors/vortex.js","behaviors/chase.js","behaviors/wave.js","behaviors/heart.js"],"formations":["formations/star.js","formations/smiley.js","formations/rocket.js"],"skins":["skins/neon.js","skins/sunset.js","skins/candy.js","skins/mono.js","skins/matrix.js"]}
+{
+    "behaviors": [
+        "behaviors/orbit.js",
+        "behaviors/vortex.js",
+        "behaviors/chase.js",
+        "behaviors/wave.js",
+        "behaviors/heart.js",
+        "behaviors/gravity_well.js"
+    ],
+    "formations": [
+        "formations/star.js",
+        "formations/smiley.js",
+        "formations/rocket.js"
+    ],
+    "skins": [
+        "skins/neon.js",
+        "skins/sunset.js",
+        "skins/candy.js",
+        "skins/mono.js",
+        "skins/matrix.js"
+    ]
+}
