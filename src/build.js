@@ -268,9 +268,13 @@
       var started = Date.now();
       (function poll() {
         var r = window.SwarmRegistry;
-        if (r && r.behaviors.length > 0 && r.skins.length > 0) return resolve(r);
+        /* loadedAll: the engine flips it once every manifest file —
+         * formations included — has been attempted. (Older engines
+         * without the flag resolve as soon as behaviors+skins land.) */
+        if (r && r.behaviors.length > 0 && r.skins.length > 0 &&
+            r.loadedAll !== false) return resolve(r);
         if (Date.now() - started > 6000) {
-          return resolve(r || { behaviors: [], skins: [] });
+          return resolve(r || { behaviors: [], skins: [], formations: [] });
         }
         setTimeout(poll, 120);
       })();
@@ -292,7 +296,7 @@
   }
 
   function renderCards(instant) {
-    var r = window.SwarmRegistry || { behaviors: [], skins: [] };
+    var r = window.SwarmRegistry || { behaviors: [], skins: [], formations: [] };
 
     var bWrap = document.getElementById('behaviorCards');
     if (bWrap && !bWrap.children.length) {
@@ -329,21 +333,49 @@
         sWrap.appendChild(card);
       });
     }
+
+    var fWrap = document.getElementById('formationCards');
+    if (fWrap && !fWrap.children.length) {
+      var previewColors = ['#6ee7ff', '#ff2fd6', '#a6ff00', '#ffe600'];
+      (r.formations || []).forEach(function (def) {
+        var card = makeCard(def, instant);
+        var cv = document.createElement('canvas');
+        cv.className = 'formation-preview';
+        cv.width = 200;
+        cv.height = 120;
+        var g = cv.getContext && cv.getContext('2d');
+        if (g) {
+          def.points.forEach(function (p, pi) {
+            g.fillStyle = previewColors[pi % previewColors.length];
+            g.beginPath();
+            g.arc(p[0] * 2, p[1] * 2, 2.4, 0, Math.PI * 2);
+            g.fill();
+          });
+        }
+        card.appendChild(cv);
+        addText(card, 'h3', '', def.name);
+        addText(card, 'p', 'card-author', 'by ' + (def.author || 'unknown'));
+        addText(card, 'p', 'card-meta', def.points.length + ' points on a 100×60 grid');
+        addText(card, 'span', 'chip', def.id);
+        fWrap.appendChild(card);
+      });
+    }
   }
 
   /* ---------------- hall of fame ---------------- */
 
-  /* One entry per unique author across behaviors + skins, with counts.
-   * Sorted: anhnt256 (the maintainer) first, then by total count
-   * descending, then by name. Pure function of the registry — exposed
-   * below as window.SwarmHallOfFame so it can be tested headlessly. */
+  /* One entry per unique author across behaviors + skins + formations,
+   * with counts. Sorted: anhnt256 (the maintainer) first, then by total
+   * count descending, then by name. Pure function of the registry —
+   * exposed below as window.SwarmHallOfFame so it can be tested
+   * headlessly. */
   function aggregateAuthors(r) {
     var map = {};
     var list = [];
     function add(def, kind) {
       var author = (def && def.author) || 'unknown';
       if (!map[author]) {
-        map[author] = { author: author, behaviors: 0, skins: 0, total: 0 };
+        map[author] = { author: author, behaviors: 0, skins: 0, formations: 0, total: 0 };
         list.push(map[author]);
       }
       map[author][kind]++;
@@ -351,6 +383,7 @@
     }
     ((r && r.behaviors) || []).forEach(function (d) { add(d, 'behaviors'); });
     ((r && r.skins) || []).forEach(function (d) { add(d, 'skins'); });
+    ((r && r.formations) || []).forEach(function (d) { add(d, 'formations'); });
     list.sort(function (a, b) {
       if (a.author === 'anhnt256') return -1;
       if (b.author === 'anhnt256') return 1;
@@ -374,6 +407,9 @@
     if (entry.skins) {
       parts.push(entry.skins + (entry.skins === 1 ? ' skin' : ' skins'));
     }
+    if (entry.formations) {
+      parts.push(entry.formations + (entry.formations === 1 ? ' formation' : ' formations'));
+    }
     return {
       initial: entry.author.charAt(0).toUpperCase(),
       color: 'hsl(' + hash + ', 72%, 58%)',
@@ -385,7 +421,7 @@
     var section = document.getElementById('halloffame');
     var wrap = document.getElementById('hofChips');
     if (!section || !wrap || wrap.children.length) return;
-    var authors = aggregateAuthors(window.SwarmRegistry || { behaviors: [], skins: [] });
+    var authors = aggregateAuthors(window.SwarmRegistry || { behaviors: [], skins: [], formations: [] });
     if (!authors.length) {
       /* Nothing to celebrate yet: hide the section and stop the build
        * observer from ever trying to assemble it. */
@@ -507,6 +543,8 @@
     await place(agents.nova, lede);
     await place(agents.mip, document.getElementById('bar'),
       'Míp placed the playground controls');
+    await place(agents.comet, document.getElementById('formationBar'),
+      'Comet placed the formation controls');
     await Promise.all([
       place(agents.comet, note),
       place(agents.pip, tip, 'Pip placed the burst tip')
@@ -586,6 +624,7 @@
     hero: buildHero,
     behaviors: function (s) { return buildCardSection(s, 'behaviors', agents.nova); },
     skins: function (s) { return buildCardSection(s, 'skins', agents.mip); },
+    formations: function (s) { return buildCardSection(s, 'formations', agents.pixel); },
     contribute: buildContribute,
     playground: buildPlayground,
     halloffame: buildHallOfFame,

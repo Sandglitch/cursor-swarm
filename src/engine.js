@@ -26,6 +26,12 @@
   var registry = {
     behaviors: [],
     skins: [],
+    formations: [],
+
+    /* Flipped to true once every manifest file has been attempted, so
+     * src/build.js can wait for the full registry (formations load
+     * last) before generating cards and the Hall of Fame. */
+    loadedAll: false,
 
     registerBehavior: function (def) {
       if (!def || !def.id || !def.name || typeof def.update !== 'function') {
@@ -49,6 +55,18 @@
         return;
       }
       registry.skins.push(def);
+    },
+
+    registerFormation: function (def) {
+      if (!def || !def.id || !def.name || !Array.isArray(def.points) || def.points.length === 0) {
+        console.warn('[swarm] Ignored a formation with missing id/name/points:', def);
+        return;
+      }
+      if (findById(registry.formations, def.id)) {
+        console.warn('[swarm] Duplicate formation id ignored:', def.id);
+        return;
+      }
+      registry.formations.push(def);
     }
   };
   window.SwarmRegistry = registry;
@@ -73,6 +91,11 @@
       'skins/candy.js',
       'skins/mono.js',
       'skins/matrix.js'
+    ],
+    formations: [
+      'formations/star.js',
+      'formations/smiley.js',
+      'formations/rocket.js'
     ]
   };
 
@@ -141,6 +164,7 @@
       pointer.x = W / 2; pointer.y = H / 2;
       smoothPointer.x = W / 2; smoothPointer.y = H / 2;
     }
+    if (formation.active) assignFormationTargets();
   }
   window.addEventListener('resize', resize);
 
@@ -176,6 +200,7 @@
         boostUntil: 0
       });
     }
+    if (formation.active) assignFormationTargets();
   }
 
   /* ------------------------------------------------------------------ */
@@ -233,6 +258,428 @@
    * against the real function instead of a copy. */
   window.SwarmEngineTest = { applyBurst: applyBurst };
 
+  /* Formation mode: when active, the behavior dropdown is overridden
+   * and every dot steers to an assigned target point instead. `targets`
+   * is parallel to `boids` (canvas coordinates, or null for spare dots
+   * that lazily orbit the formation). */
+  var formation = {
+    active: false,
+    gridPoints: null,
+    targets: [],
+    center: { x: 0, y: 0 }
+  };
+
+  /* Last finished Collect-the-Orbs score (set by src/game.js), folded
+   * into share links and share cards. */
+  var lastScore = null;
+
+  /* Control-bar element refs, captured by buildControls(). */
+  var controls = null;
+
+  /* ------------------------------------------------------------------ */
+  /* Formations                                                          */
+  /*                                                                     */
+  /* A formation is pure data: [x, y] points on a 100x60 grid. The grid  */
+  /* is scaled to a centered box on the canvas; each dot is greedily     */
+  /* assigned the nearest still-free target and springs toward it with   */
+  /* a tiny jitter so the shape breathes. With reduced motion the dots   */
+  /* simply snap onto their targets.                                     */
+  /* ------------------------------------------------------------------ */
+  function formationScale() {
+    var boxW = Math.min(W * 0.86, 920);
+    var boxH = boxW * 0.6;
+    if (boxH > H * 0.82) { boxH = H * 0.82; boxW = boxH / 0.6; }
+    var s = boxW / 100;
+    return { s: s, ox: W / 2 - 50 * s, oy: H / 2 - 30 * s };
+  }
+
+  function assignFormationTargets() {
+    var pts = formation.gridPoints || [];
+    var sc = formationScale();
+    formation.center.x = W / 2;
+    formation.center.y = H / 2;
+    var canvasPts = [];
+    for (var i = 0; i < pts.length; i++) {
+      canvasPts.push({ x: sc.ox + pts[i][0] * sc.s, y: sc.oy + pts[i][1] * sc.s });
+    }
+    /* More points than dots: sample the points evenly. */
+    var n = boids.length;
+    if (canvasPts.length > n && n > 0) {
+      var sampled = [];
+      var stepF = canvasPts.length / n;
+      for (var j = 0; j < n; j++) sampled.push(canvasPts[Math.floor(j * stepF)]);
+      canvasPts = sampled;
+    }
+    /* Greedy nearest-free-target assignment. */
+    var used = [];
+    for (var u = 0; u < canvasPts.length; u++) used.push(false);
+    formation.targets = [];
+    for (var d = 0; d < boids.length; d++) {
+      var b = boids[d];
+      var best = -1, bestD2 = Infinity;
+      for (var t = 0; t < canvasPts.length; t++) {
+        if (used[t]) continue;
+        var dx = canvasPts[t].x - b.x;
+        var dy = canvasPts[t].y - b.y;
+        var d2 = dx * dx + dy * dy;
+        if (d2 < bestD2) { bestD2 = d2; best = t; }
+      }
+      if (best >= 0) {
+        used[best] = true;
+        formation.targets.push(canvasPts[best]);
+      } else {
+        formation.targets.push(null); /* spare dot: orbits the shape */
+      }
+    }
+  }
+
+  function steerToFormation(b, i, now) {
+    var tgt = formation.targets[i];
+    if (tgt) {
+      if (REDUCED_MOTION) {
+        b.x = tgt.x; b.y = tgt.y; b.vx = 0; b.vy = 0;
+        return;
+      }
+      b.vx += (tgt.x - b.x) * 0.035;
+      b.vy += (tgt.y - b.y) * 0.035;
+      b.vx += (Math.random() - 0.5) * 0.05;   /* breathing jitter */
+      b.vy += (Math.random() - 0.5) * 0.05;
+    } else {
+      /* No target left: drift in a lazy ring around the formation. */
+      var dx = b.x - formation.center.x;
+      var dy = b.y - formation.center.y;
+      var d = Math.sqrt(dx * dx + dy * dy) || 1;
+      b.vx += (-dy / d) * 0.05 + (dx / d) * (d - 190) * 0.0004;
+      b.vy += (dx / d) * 0.05 + (dy / d) * (d - 190) * 0.0004;
+    }
+  }
+
+  function syncFormationUI() {
+    if (!controls) return;
+    controls.behaviorSelect.disabled = formation.active;
+    if (controls.formationHint) {
+      controls.formationHint.hidden = !formation.active;
+    }
+    if (controls.formBtn) {
+      controls.formBtn.textContent = formation.active ? 'Release' : '✨ Form';
+    }
+  }
+
+  function formFormation(points) {
+    if (!points || !points.length) return;
+    formation.gridPoints = points;
+    formation.active = true;
+    assignFormationTargets();
+    syncFormationUI();
+  }
+
+  function releaseFormation() {
+    if (!formation.active) return;
+    formation.active = false;
+    formation.targets = [];
+    if (!REDUCED_MOTION) spawnBurst(formation.center.x, formation.center.y);
+    syncFormationUI();
+  }
+
+  /* ---------------- text formations: a compact 5x7 pixel font -------- */
+  var FONT_5X7 = {
+    'A': ['.###.', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
+    'B': ['####.', '#...#', '#...#', '####.', '#...#', '#...#', '####.'],
+    'C': ['.####', '#....', '#....', '#....', '#....', '#....', '.####'],
+    'D': ['###..', '#..#.', '#...#', '#...#', '#...#', '#..#.', '###..'],
+    'E': ['#####', '#....', '#....', '####.', '#....', '#....', '#####'],
+    'F': ['#####', '#....', '#....', '####.', '#....', '#....', '#....'],
+    'G': ['.####', '#....', '#....', '#.###', '#...#', '#...#', '.###.'],
+    'H': ['#...#', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
+    'I': ['#####', '..#..', '..#..', '..#..', '..#..', '..#..', '#####'],
+    'J': ['..###', '...#.', '...#.', '...#.', '...#.', '#..#.', '.##..'],
+    'K': ['#...#', '#..#.', '#.#..', '##...', '#.#..', '#..#.', '#...#'],
+    'L': ['#....', '#....', '#....', '#....', '#....', '#....', '#####'],
+    'M': ['#...#', '##.##', '#.#.#', '#.#.#', '#...#', '#...#', '#...#'],
+    'N': ['#...#', '##..#', '##..#', '#.#.#', '#..##', '#..##', '#...#'],
+    'O': ['.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
+    'P': ['####.', '#...#', '#...#', '####.', '#....', '#....', '#....'],
+    'Q': ['.###.', '#...#', '#...#', '#...#', '#.#.#', '#..#.', '.##.#'],
+    'R': ['####.', '#...#', '#...#', '####.', '#.#..', '#..#.', '#...#'],
+    'S': ['.####', '#....', '#....', '.###.', '....#', '....#', '####.'],
+    'T': ['#####', '..#..', '..#..', '..#..', '..#..', '..#..', '..#..'],
+    'U': ['#...#', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
+    'V': ['#...#', '#...#', '#...#', '#...#', '#...#', '.#.#.', '..#..'],
+    'W': ['#...#', '#...#', '#...#', '#.#.#', '#.#.#', '##.##', '#...#'],
+    'X': ['#...#', '.#.#.', '.#.#.', '..#..', '.#.#.', '.#.#.', '#...#'],
+    'Y': ['#...#', '#...#', '.#.#.', '..#..', '..#..', '..#..', '..#..'],
+    'Z': ['#####', '....#', '...#.', '..#..', '.#...', '#....', '#####'],
+    '0': ['.###.', '#..##', '#.#.#', '##..#', '#...#', '#...#', '.###.'],
+    '1': ['..#..', '.##..', '..#..', '..#..', '..#..', '..#..', '.###.'],
+    '2': ['.###.', '#...#', '....#', '...#.', '..#..', '.#...', '#####'],
+    '3': ['####.', '....#', '....#', '.###.', '....#', '....#', '####.'],
+    '4': ['...#.', '..##.', '.#.#.', '#..#.', '#####', '...#.', '...#.'],
+    '5': ['#####', '#....', '####.', '....#', '....#', '#...#', '.###.'],
+    '6': ['.###.', '#....', '#....', '####.', '#...#', '#...#', '.###.'],
+    '7': ['#####', '....#', '...#.', '..#..', '..#..', '..#..', '..#..'],
+    '8': ['.###.', '#...#', '#...#', '.###.', '#...#', '#...#', '.###.'],
+    '9': ['.###.', '#...#', '#...#', '.####', '....#', '....#', '.###.'],
+    ' ': ['.....', '.....', '.....', '.....', '.....', '.....', '.....'],
+    '♥': ['.#.#.', '#####', '#####', '.###.', '.###.', '..#..', '.....'],
+    '★': ['..#..', '.###.', '#####', '.###.', '.#.#.', '#...#', '.....']
+  };
+
+  /* Sample a word into formation points on the 100x60 grid. Glyphs are
+   * scaled to fill the width (height-capped) and centered. Unknown
+   * characters become spaces. Returns [[x, y], ...] with float coords. */
+  function textToPoints(text) {
+    var word = String(text || '').toUpperCase();
+    if (!word.length) return [];
+    var totalW = word.length * 6 - 1;                 /* 5px glyph + 1px gap */
+    var scaleF = Math.min(92 / totalW, 52 / 7);
+    var ox = (100 - totalW * scaleF) / 2;
+    var oy = (60 - 7 * scaleF) / 2;
+    var points = [];
+    for (var ci = 0; ci < word.length; ci++) {
+      var glyph = FONT_5X7[word.charAt(ci)] || FONT_5X7[' '];
+      for (var row = 0; row < 7; row++) {
+        for (var col = 0; col < 5; col++) {
+          if (glyph[row].charAt(col) === '#') {
+            points.push([
+              ox + (ci * 6 + col) * scaleF + scaleF / 2,
+              oy + row * scaleF + scaleF / 2
+            ]);
+          }
+        }
+      }
+    }
+    return points;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Share my swarm                                                      */
+  /*                                                                     */
+  /* The current combo (behavior, skin, dot count — plus the last game   */
+  /* score when there is one) rides in the URL hash, e.g.                */
+  /* #s=matrix&b=orbit&n=300. Opening such a link applies the combo.     */
+  /* ------------------------------------------------------------------ */
+  function encodeShareState(st) {
+    var parts = [];
+    if (st.skin) parts.push('s=' + encodeURIComponent(st.skin));
+    if (st.behavior) parts.push('b=' + encodeURIComponent(st.behavior));
+    if (st.count) parts.push('n=' + st.count);
+    if (st.score !== null && typeof st.score === 'number') {
+      parts.push('score=' + st.score);
+    }
+    return parts.join('&');
+  }
+
+  function decodeShareState(str) {
+    if (!str) return null;
+    var out = {};
+    var found = false;
+    String(str).replace(/^#/, '').split('&').forEach(function (kv) {
+      var i = kv.indexOf('=');
+      if (i < 0) return;
+      var k = kv.slice(0, i);
+      var v = '';
+      try { v = decodeURIComponent(kv.slice(i + 1)); } catch (e) { return; }
+      if (k === 's' && v) { out.skin = v; found = true; }
+      else if (k === 'b' && v) { out.behavior = v; found = true; }
+      else if (k === 'n') {
+        var n = parseInt(v, 10);
+        if (n >= 30 && n <= 600) { out.count = n; found = true; }
+      }
+      /* 'score' is written into shared links so a card/link can carry
+       * it, but a recipient's page does not adopt a stranger's score. */
+    });
+    return found ? out : null;
+  }
+
+  function currentShareState() {
+    return {
+      behavior: activeBehavior ? activeBehavior.id : null,
+      skin: activeSkin ? activeSkin.id : null,
+      count: requestedCount || null,
+      score: lastScore
+    };
+  }
+
+  function shareLink() {
+    return window.location.href.split('#')[0] + '#' +
+      encodeShareState(currentShareState());
+  }
+
+  function copyShareLink() {
+    var link = shareLink();
+    var btn = controls && controls.shareLinkBtn;
+    function done() {
+      if (!btn) return;
+      var old = btn.textContent;
+      btn.textContent = 'Link copied!';
+      setTimeout(function () { btn.textContent = old; }, 1600);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(link).then(done, function () {
+        window.prompt('Copy your swarm link:', link);
+      });
+    } else {
+      window.prompt('Copy your swarm link:', link);
+    }
+  }
+
+  /* Apply a share hash on load. Unknown ids are ignored gracefully. */
+  function applyHashState() {
+    var st = decodeShareState(window.location.hash || '');
+    if (!st || !controls) return;
+    if (st.behavior) {
+      var b = findById(registry.behaviors, st.behavior);
+      if (b) {
+        activeBehavior = b;
+        controls.behaviorSelect.value = b.id;
+      }
+    }
+    if (st.skin) {
+      var s = findById(registry.skins, st.skin);
+      if (s) {
+        activeSkin = s;
+        controls.skinSelect.value = s.id;
+        ctx2d.fillStyle = s.background || '#05060f';
+        ctx2d.fillRect(0, 0, W, H);
+      }
+    }
+    if (st.count) {
+      controls.countRange.value = st.count;
+      controls.countValue.textContent = st.count;
+      makeBoids(st.count);
+    }
+  }
+
+  /* ---------------- share card: a 1200x630 PNG ---------------------- */
+  var cardCanvas = null;
+  var cardBlob = null;
+
+  function renderCardCanvas(scoreOverride) {
+    if (!cardCanvas) {
+      cardCanvas = document.createElement('canvas');
+      cardCanvas.width = 1200;
+      cardCanvas.height = 630;
+    }
+    var c = cardCanvas.getContext('2d');
+    var skin = activeSkin ||
+      { colors: ['#ffffff'], background: '#05060f', name: 'Default' };
+    c.fillStyle = skin.background || '#05060f';
+    c.fillRect(0, 0, 1200, 630);
+
+    /* The live swarm, cover-fitted over the whole card. */
+    if (canvas.width > 0 && canvas.height > 0) {
+      var scale = Math.max(1200 / canvas.width, 630 / canvas.height);
+      var dw = canvas.width * scale;
+      var dh = canvas.height * scale;
+      c.drawImage(canvas, (1200 - dw) / 2, (630 - dh) / 2, dw, dh);
+    }
+
+    var score = (typeof scoreOverride === 'number') ? scoreOverride : lastScore;
+    var combo = (activeBehavior ? activeBehavior.name : 'Swarm') + ' · ' +
+      (skin.name || 'Default') + ' · ' + (requestedCount || 0) + ' dots';
+
+    /* Text block, top-left, over a soft dark plate. */
+    c.fillStyle = 'rgba(3, 4, 12, 0.55)';
+    c.fillRect(40, 36, 700, score !== null ? 218 : 168);
+    c.fillStyle = '#ffffff';
+    c.textAlign = 'left';
+    c.font = '700 66px "Segoe UI", system-ui, sans-serif';
+    c.fillText('Cursor Swarm', 68, 116);
+    c.font = '400 31px "Segoe UI", system-ui, sans-serif';
+    c.fillStyle = 'rgba(255, 255, 255, 0.92)';
+    if (score !== null) {
+      c.font = '600 34px "Segoe UI", system-ui, sans-serif';
+      c.fillText('🏆 I collected ' + score + ' orbs in Collect the Orbs!', 68, 172);
+      c.font = '400 28px "Segoe UI", system-ui, sans-serif';
+      c.fillText(combo, 68, 220);
+    } else {
+      c.fillText(combo, 68, 172);
+    }
+
+    c.textAlign = 'center';
+    c.font = '500 27px "Segoe UI", system-ui, sans-serif';
+    c.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    c.fillText('anhnt256.github.io/cursor-swarm', 600, 594);
+    c.textAlign = 'left';
+    return cardCanvas;
+  }
+
+  function refreshCardBlob() {
+    try {
+      renderCardCanvas().toBlob(function (b) { if (b) cardBlob = b; }, 'image/png');
+    } catch (e) { /* canvas taint etc. — the click path re-renders anyway */ }
+  }
+
+  /* iOS note: a share must ride the tap's user activation, and building
+   * a File is async — so the card is pre-rendered to a Blob whenever
+   * the button is hovered/focused (and after each game), letting the
+   * click handler hand a ready File to navigator.share synchronously.
+   * If no pre-render exists (or an explicit score is requested), the
+   * canvas is redrawn synchronously in the handler and the Blob is
+   * taken from that fresh render. */
+  function shareCard(scoreOverride) {
+    renderCardCanvas(scoreOverride); /* synchronous redraw, always */
+    function deliver(blob) {
+      if (!blob) return;
+      var file = null;
+      try {
+        file = new File([blob], 'cursor-swarm.png', { type: 'image/png' });
+      } catch (e) { file = null; }
+      if (file && navigator.canShare &&
+          navigator.canShare({ files: [file] }) && navigator.share) {
+        navigator.share({ files: [file], title: 'Cursor Swarm' })
+          .catch(function () {});
+      } else {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'cursor-swarm.png';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      }
+    }
+    if (typeof scoreOverride !== 'number' && cardBlob) {
+      deliver(cardBlob);
+      refreshCardBlob();
+    } else if (cardCanvas.toBlob) {
+      cardCanvas.toBlob(function (b) {
+        if (b) cardBlob = b;
+        deliver(b);
+      }, 'image/png');
+    }
+  }
+
+  /* Read-only access for src/game.js (and tests), in the same spirit
+   * as SwarmEngineTest above. */
+  window.SwarmEngine = {
+    getDots: function () { return boids; },
+    getActiveCount: function () { return activeCount; },
+    getSize: function () { return { width: W, height: H }; },
+    getPointer: function () { return pointer; },
+    burst: function (x, y) { spawnBurst(x, y); },
+    isReducedMotion: function () { return REDUCED_MOTION; }
+  };
+  window.SwarmFormation = {
+    form: formFormation,
+    release: releaseFormation,
+    isActive: function () { return formation.active; },
+    textToPoints: textToPoints
+  };
+  window.SwarmShare = {
+    encode: encodeShareState,
+    decode: decodeShareState,
+    link: shareLink,
+    copyLink: copyShareLink,
+    shareCard: shareCard,
+    setLastScore: function (n) {
+      lastScore = (typeof n === 'number') ? n : null;
+      refreshCardBlob();
+    },
+    getState: currentShareState
+  };
+
   /* ------------------------------------------------------------------ */
   /* Adaptive quality                                                    */
   /*                                                                     */
@@ -287,7 +734,11 @@
     for (var i = 0; i < activeCount; i++) {
       var b = boids[i];
       ctxForBehavior.index = i;
-      if (activeBehavior) activeBehavior.update(b, ctxForBehavior);
+      if (formation.active) {
+        steerToFormation(b, i, now);
+      } else if (activeBehavior) {
+        activeBehavior.update(b, ctxForBehavior);
+      }
 
       /* Integrate + cap speed (freshly burst dots get a brief, higher
        * cap so the shove isn't clipped in the same frame). */
@@ -383,6 +834,20 @@
     var countValue = document.getElementById('countValue');
     var pauseBtn = document.getElementById('pauseBtn');
 
+    controls = {
+      behaviorSelect: behaviorSelect,
+      skinSelect: skinSelect,
+      countRange: countRange,
+      countValue: countValue,
+      shareLinkBtn: document.getElementById('shareLinkBtn'),
+      shareCardBtn: document.getElementById('shareCardBtn'),
+      formationSelect: document.getElementById('formationSelect'),
+      formationText: document.getElementById('formationText'),
+      formBtn: document.getElementById('formBtn'),
+      releaseBtn: document.getElementById('releaseBtn'),
+      formationHint: document.getElementById('formationHint')
+    };
+
     fillSelect(behaviorSelect, registry.behaviors);
     fillSelect(skinSelect, registry.skins);
 
@@ -406,6 +871,58 @@
       running = !running;
       pauseBtn.textContent = running ? '⏸ Pause' : '▶ Play';
     });
+
+    /* -------- share buttons -------- */
+    if (controls.shareLinkBtn) {
+      controls.shareLinkBtn.addEventListener('click', copyShareLink);
+    }
+    if (controls.shareCardBtn) {
+      controls.shareCardBtn.addEventListener('click', function () { shareCard(); });
+      /* Pre-render the card so a tap can share a ready File (iOS). */
+      controls.shareCardBtn.addEventListener('pointerenter', refreshCardBlob);
+      controls.shareCardBtn.addEventListener('focus', refreshCardBlob);
+    }
+
+    /* -------- formation controls -------- */
+    if (controls.formationSelect) {
+      var fs = controls.formationSelect;
+      fs.innerHTML = '';
+      var textOpt = document.createElement('option');
+      textOpt.value = '__text__';
+      textOpt.textContent = 'Type your own…';
+      fs.appendChild(textOpt);
+      registry.formations.forEach(function (def) {
+        var opt = document.createElement('option');
+        opt.value = def.id;
+        opt.textContent = def.name + (def.author ? ' — ' + def.author : '');
+        fs.appendChild(opt);
+      });
+      fs.addEventListener('change', function () {
+        if (controls.formationText) {
+          controls.formationText.style.display =
+            (fs.value === '__text__') ? '' : 'none';
+        }
+      });
+    }
+    if (controls.formBtn) {
+      controls.formBtn.addEventListener('click', function () {
+        if (formation.active) { releaseFormation(); return; }
+        var pts = null;
+        if (!controls.formationSelect ||
+            controls.formationSelect.value === '__text__') {
+          var txt = controls.formationText
+            ? controls.formationText.value.trim() : '';
+          pts = textToPoints(txt || 'HI');
+        } else {
+          var def = findById(registry.formations, controls.formationSelect.value);
+          if (def) pts = def.points;
+        }
+        if (pts && pts.length) formFormation(pts);
+      });
+    }
+    if (controls.releaseBtn) {
+      controls.releaseBtn.addEventListener('click', releaseFormation);
+    }
 
     makeBoids(parseInt(countRange.value, 10));
   }
@@ -435,14 +952,17 @@
   function boot() {
     resize();
     loadManifest().then(function (manifest) {
-      var files = (manifest.behaviors || []).concat(manifest.skins || []);
+      var files = (manifest.behaviors || [])
+        .concat(manifest.skins || [], manifest.formations || []);
       var chain = Promise.resolve();
       files.forEach(function (src) {
         chain = chain.then(function () { return loadScript(src); });
       });
       return chain;
     }).then(function () {
+      registry.loadedAll = true;
       buildControls();
+      applyHashState();
       requestAnimationFrame(frame);
     });
   }
