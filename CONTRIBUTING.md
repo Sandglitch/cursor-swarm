@@ -21,11 +21,13 @@ cd cursor-swarm
 
 (You can also do everything in the GitHub web editor — no terminal needed.)
 
-## Step 2 — Decide: a behavior or a skin?
+## Step 2 — Decide: a behavior, a skin, or a formation?
 
 - **Behavior** — a new way for the swarm to move (spiral, fireworks, snake…).
   One file in `behaviors/`.
 - **Skin** — a new color palette and dot style. One file in `skins/`.
+- **Formation** — a shape the swarm arranges itself into (a star, a crown,
+  a cat face…). Pure data, no code at all. One file in `formations/`.
 
 Pick **one**. One file per pull request keeps reviews fast and merges
 conflict-free.
@@ -104,6 +106,44 @@ window.SwarmRegistry.registerSkin({
 Skins are the easiest first PR of all — if you can pick 3–5 colors you
 like together, you're done. 🎨
 
+### Option C — a formation
+
+A formation is **just data**: a list of `[x, y]` points on a **100×60
+grid** (x runs 0–100 left→right, y runs 0–60 top→bottom). When a visitor
+picks your formation in the playground, each dot flies to one of your
+points and the swarm *becomes* your shape. No code, no functions —
+if you can sketch a shape on graph paper, you can ship a formation.
+
+Create `formations/<your-formation-name>.js` and paste:
+
+```js
+/*
+ * Formation: Crown
+ * Author: YOUR-GITHUB-USERNAME
+ * One sentence about the shape.
+ */
+window.SwarmRegistry.registerFormation({
+  id: 'crown',                  // unique, lowercase, no spaces
+  name: 'Crown',                // shown in the Formation dropdown
+  author: 'YOUR-GITHUB-USERNAME',
+  points: [
+    [10, 45], [15, 25], [30, 40], [50, 18], [70, 40], [85, 25], [90, 45],
+    [10, 52], [90, 52]
+    // …add as many points as your shape needs (50–300 is a good range)
+  ]
+});
+```
+
+Tips:
+
+- Sketch your shape on graph paper (or any grid tool) with a 100-wide,
+  60-tall grid, then read off the coordinates.
+- Outline points alone read clearly; add interior points to fill the
+  shape in. Denser = more solid.
+- Every point is a pair of numbers in `[0–100, 0–60]` — that's the only
+  rule. Look at `formations/star.js`, `formations/smiley.js` and
+  `formations/rocket.js` for examples.
+
 ## Step 4 — Register your file
 
 Open `contributions.json` and add **one line** with your file's path to
@@ -118,6 +158,10 @@ the matching list:
   "skins": [
     "skins/neon.js",
     "skins/ocean.js"
+  ],
+  "formations": [
+    "formations/star.js",
+    "formations/crown.js"
   ]
 }
 ```
@@ -128,7 +172,8 @@ the matching list:
 
 Open `index.html` in your browser (double-click it, or serve the folder
 with any static server). Your behavior/skin should appear in the control
-bar at the top. Play with it. If the swarm sits still or the dropdown is
+bar at the top; your formation in the Formation dropdown just below it.
+Play with it. If the swarm sits still or the dropdown is
 missing your entry, check:
 
 - Is your file listed in `contributions.json`?

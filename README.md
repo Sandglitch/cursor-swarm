@@ -12,8 +12,9 @@ Cursor Swarm is a playful interactive web toy: hundreds of glowing dots
 (a boid swarm) flow, orbit, spiral and even form a heart around your mouse
 pointer. The swarm hovers behind the page as a soft ambient glow while you
 read, and comes to full strength in the playground section, where you can
-switch behaviors and color skins, drag the slider to add more dots, and
-just play.
+switch behaviors and color skins, drag the slider to add more dots, make
+the swarm form shapes (or spell your name!), play a 60-second orb-collecting
+game, and share your favorite combo as a link or a picture card.
 
 And the demo page itself is part of the toy: **it builds itself as you
 scroll.** Five tiny AI cursors — Míp, Nova, Pixel, Comet and Pip — fly around each
@@ -36,12 +37,14 @@ designed to be your first one. 💛
   pointer tracking) and the control bar.
 - `src/build.js` runs the five builder cursors that assemble the demo
   page section by section as you scroll (and quietly shows everything at
-  once if you prefer reduced motion). The Behaviors and Skins sections of
-  the page are generated live from the registry — add a file, and your
-  card appears on the page automatically.
+  once if you prefer reduced motion). The Behaviors, Skins and Formations
+  sections of the page are generated live from the registry — add a file,
+  and your card appears on the page automatically.
 - A **behavior** is one small file in `behaviors/` that tells the swarm
   how to move. A **skin** is one small file in `skins/` with a color
-  palette and dot style.
+  palette and dot style. A **formation** is one small file in
+  `formations/`: just a list of points on a 100×60 grid that the swarm
+  arranges itself into.
 - `contributions.json` is the manifest: the engine loads every file
   listed there, and each file registers itself with the engine.
 - A contribution = **add 1 file + add 1 line to `contributions.json`.**
@@ -50,11 +53,12 @@ designed to be your first one. 💛
 ## Contribute in 15 minutes
 
 You can add a brand-new behavior (fireworks! a snake trail! dots that
-spell "HI"!) or a new skin (ocean, lava, matrix green…) in about
-15 minutes, even if this is your very first pull request.
+spell "HI"!), a new skin (ocean, lava, matrix green…), or a new
+formation (a star, a rocket, your initials — just a list of points!)
+in about 15 minutes, even if this is your very first pull request.
 
 👉 Follow the step-by-step guide in **[CONTRIBUTING.md](CONTRIBUTING.md)** —
-it has copy-paste templates for both kinds of contribution.
+it has copy-paste templates for all three kinds of contribution.
 
 Looking for an idea? Check the
 [good first issues](https://github.com/anhnt256/cursor-swarm/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
@@ -66,9 +70,11 @@ index.html          the demo page (builds itself as you scroll)
 style.css           page styling
 src/engine.js       canvas engine + registry + loader
 src/build.js        the builder cursors that assemble the page
+src/game.js         the "Collect the Orbs" mini-game
 behaviors/          one file per swarm behavior   ← your PR goes here
 skins/              one file per color skin        ← …or here
-contributions.json  manifest of behaviors & skins (add 1 line)
+formations/         one file per swarm formation   ← …or here
+contributions.json  manifest of behaviors, skins & formations (add 1 line)
 ```
 
 ## Contributors
@@ -78,7 +84,7 @@ Thank you to everyone who teaches the swarm a new trick! 🙌
 
 | Contributor | Contribution |
 |---|---|
-| [@anhnt256](https://github.com/anhnt256) | Engine + Orbit, Vortex, Chase, Wave, Heart behaviors + Neon, Sunset, Candy, Mono skins |
+| [@anhnt256](https://github.com/anhnt256) | Engine + Orbit, Vortex, Chase, Wave, Heart behaviors + Neon, Sunset, Candy, Mono skins + Star, Smiley, Rocket formations |
 | [@faithfull-3](https://github.com/faithfull-3) | Matrix skin — the first community contribution 🎉 |
 | *You could be next!* | *Your behavior or skin here — see [CONTRIBUTING.md](CONTRIBUTING.md)* |
 
